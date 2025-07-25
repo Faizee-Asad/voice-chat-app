@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head><title>Voice Chat</title></head>
+<body>
+  <h2>Stranger Voice Chat</h2>
+  <audio id="remoteAudio" autoplay></audio>
+  <script src="/socket.io/socket.io.js"></script>
+  <script>
+    const socket = io();
+    const peer = new RTCPeerConnection();
+
+    navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+      stream.getTracks().forEach(track => peer.addTrack(track, stream));
+      peer.ontrack = event => {
+        document.getElementById('remoteAudio').srcObject = event.streams[0];
+      };
+
+      peer.onicecandidate = e => {
+        if (e.candidate) socket.emit('signal', { candidate: e.candidate });
+      };
+
+      socket.on('signal', async data => {
+        if (data.offer) {
+          await peer.setRemoteDescription(new RTCSessionDescription(data.offer));
+          const answer = await peer.createAnswer();
+          await peer.setLocalDescription(answer);
+          socket.emit('signal', { answer });
+        } else if (data.answer) {
+          await peer.setRemoteDescription(new RTCSessionDescription(data.answer));
+        } else if (data.candidate) {
+          await peer.addIceCandidate(new RTCIceCandidate(data.candidate));
+        }
+      });
+
+      peer.createOffer().then(offer => {
+        peer.setLocalDescription(offer);
+        socket.emit('signal', { offer });
+      });
+    });
+  </script>
+</body>
+</html>
